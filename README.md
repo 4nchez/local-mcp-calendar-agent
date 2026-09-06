@@ -71,7 +71,9 @@ Dashboard → MCP Client (Intent 분류 · Tool 선택) → MCP Server (파싱 �
 | **LLM (Ollama)** | 로컬 LLM. Intent 보조 분류와 응답 문장 생성 |
 | **API Server** | 일정 CRUD와 시간 충돌 검증 등 비즈니스 로직 |
 
-자세한 설계 근거는 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)에 정리했다.
+자세한 설계 근거는 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)에,
+로컬 LLM 성능 문제를 90초에서 739ms로 줄인 과정은
+[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)에 정리했다.
 
 ---
 
@@ -235,6 +237,9 @@ make test
 **시간이 이상하게 해석된다** — `parse_only` Tool로 파싱 결과만 확인할 수 있다. 오전/오후가 없는 1~6시는 오후로 해석하는 것이 의도된 동작이다.
 
 **포트가 충돌한다** — `.env`에서 포트를 바꾼다.
+
+로컬 LLM 응답 지연, nginx DNS 캐싱 등 실제로 겪은 문제의 원인 분석과 해결 과정은
+[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)에 정리했다.
 
 ---
 
