@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>일정 관리 Agent</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" />
+<link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar__id">
+    <h1>일정 관리 Agent</h1>
+    <p>자연어로 말하면 규칙 라우터가 도구를 골라 실행합니다</p>
+  </div>
+  <div class="status" id="status" aria-live="polite">
+    <span class="status__item" data-key="api"><i></i>API</span>
+    <span class="status__item" data-key="mcp"><i></i>MCP</span>
+    <span class="status__item" data-key="llm"><i></i>LLM</span>
+  </div>
+</header>
+
+<section class="rail" id="rail" aria-label="요청 처리 단계">
+  <ol class="rail__list">
+    <li class="rail__step" data-stage="input"><span class="rail__num">1</span><span class="rail__name">입력 접수</span><span class="rail__meta">대기</span></li>
+    <li class="rail__step" data-stage="intent"><span class="rail__num">2</span><span class="rail__name">Intent 분류</span><span class="rail__meta">대기</span></li>
+    <li class="rail__step" data-stage="tool"><span class="rail__num">3</span><span class="rail__name">Tool 실행</span><span class="rail__meta">대기</span></li>
+    <li class="rail__step" data-stage="api"><span class="rail__num">4</span><span class="rail__name">API 처리</span><span class="rail__meta">대기</span></li>
+    <li class="rail__step" data-stage="reply"><span class="rail__num">5</span><span class="rail__name">응답 생성</span><span class="rail__meta">대기</span></li>
+  </ol>
+</section>
+
+<main class="workspace">
+  <section class="chat" aria-label="대화">
+    <div class="chat__log" id="log">
+      <div class="bubble bubble--agent">
+        <p>안녕하세요. 일정을 말로 관리할 수 있습니다.</p>
+        <p>“내일 오후 2시에 면접 일정 추가해줘”처럼 입력해 보세요.</p>
+      </div>
+    </div>
+
+    <div class="chat__compose">
+      <div class="chips" id="chips">
+        <button type="button" class="chip">내일 오후 2시에 면접 일정 추가해줘</button>
+        <button type="button" class="chip">이번주 일정 알려줘</button>
+        <button type="button" class="chip">내일 면접을 오후 5시로 옮겨줘</button>
+        <button type="button" class="chip">내일 면접 취소해줘</button>
+      </div>
+      <div class="composer">
+        <input id="input" type="text" autocomplete="off" maxlength="200"
+               placeholder="일정을 말해 주세요" aria-label="메시지 입력" />
+        <button id="send" type="button">보내기</button>
+      </div>
+    </div>
+  </section>
+
+  <aside class="side">
+    <section class="panel">
+      <div class="panel__head">
+        <h2>다가오는 일정</h2>
+        <span class="panel__count" id="count">0건</span>
+      </div>
+      <div class="panel__body" id="schedules">
+        <p class="empty">등록된 일정이 없습니다.</p>
+      </div>
+    </section>
+
+    <section class="panel panel--log">
+      <div class="panel__head">
+        <h2>실행 로그</h2>
+        <button type="button" class="ghost" id="clear-log">비우기</button>
+      </div>
+      <div class="panel__body" id="toollog">
+        <p class="empty">아직 실행된 도구가 없습니다.</p>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<script src="./app.js"></script>
+</body>
+</html>

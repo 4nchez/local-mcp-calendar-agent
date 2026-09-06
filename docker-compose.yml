@@ -1,0 +1,101 @@
+# 각 컴포넌트를 독립 컨테이너로 분리해 역할을 명확히 하고 서비스 간 결합도를 낮춘다.
+# LLM은 별도 컨테이너라 모델만 갈아끼우면 되고, API Server는 AI 없이도 단독으로 동작한다.
+#
+#   dashboard → mcp-client(Agent) → mcp-server(Tool) → api-server(Data)
+#                      └────────→ ollama(LLM)
+
+name: local-schedule-agent
+
+services:
+  # ── 1. 화면 ──────────────────────────────────────────────
+  dashboard:
+    build: ./dashboard
+    container_name: schedule-dashboard
+    ports:
+      - "${DASHBOARD_PORT:-3000}:80"
+    depends_on:
+      mcp-client:
+        condition: service_started
+    restart: unless-stopped
+
+  # ── 2. Agent (Intent 분류 + Tool 선택) ───────────────────
+  mcp-client:
+    build: ./mcp-client
+    container_name: schedule-mcp-client
+    environment:
+      TZ: Asia/Seoul
+      API_BASE_URL: http://api-server:8000
+      MCP_SERVER_URL: http://mcp-server:8000/mcp
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+      LLM_ENABLED: ${LLM_ENABLED:-true}
+      LLM_TIMEOUT: ${LLM_TIMEOUT:-45}
+    ports:
+      - "${MCP_CLIENT_PORT:-8003}:8000"
+    depends_on:
+      api-server:
+        condition: service_healthy
+      mcp-server:
+        condition: service_started
+    restart: unless-stopped
+
+  # ── 3. Tool 실행 서버 ────────────────────────────────────
+  mcp-server:
+    build: ./mcp-server
+    container_name: schedule-mcp-server
+    environment:
+      TZ: Asia/Seoul
+      API_BASE_URL: http://api-server:8000
+      PORT: 8000
+    ports:
+      - "${MCP_SERVER_PORT:-8002}:8000"
+    depends_on:
+      api-server:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── 4. 도메인 API ────────────────────────────────────────
+  api-server:
+    build: ./api-server
+    container_name: schedule-api-server
+    environment:
+      TZ: Asia/Seoul
+    ports:
+      - "${API_PORT:-8001}:8000"
+    restart: unless-stopped
+
+  # ── 5. 로컬 LLM ──────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: schedule-ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    restart: unless-stopped
+    # GPU를 쓰려면 아래 주석을 해제한다 (NVIDIA Container Toolkit 필요)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # 모델 내려받기 전용 일회성 컨테이너. 받은 뒤 종료된다.
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: schedule-ollama-init
+    depends_on:
+      - ollama
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "echo '모델 준비 중: ${OLLAMA_MODEL:-qwen2.5:3b}';
+       until ollama list > /dev/null 2>&1; do sleep 2; done;
+       ollama pull ${OLLAMA_MODEL:-qwen2.5:3b} && echo '모델 준비 완료'"
+    restart: "no"
+
+volumes:
+  ollama-models:
