@@ -39,7 +39,18 @@ from .router import (
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://api-server:8000")
 
-app = FastAPI(title="MCP Client (Agent)", version="1.0.0")
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ollama 컨테이너가 늦게 뜨거나 재생성 중일 수 있으므로 넉넉히 기다린다.
+    # 30회 x 10초 = 5분. 실패해도 첫 요청에서 로드되므로 문제는 없다.
+    asyncio.create_task(llm.warmup(retries=30, delay=10.0))
+    yield
+
+
+app = FastAPI(title="MCP Client (Agent)", version="1.0.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
@@ -256,7 +267,7 @@ async def chat(req: ChatRequest) -> dict:
         trace.done("reply", "ok", "LLM 생성")
     else:
         reply = fallback
-        trace.done("reply", "warn", "LLM 미응답 · 템플릿 사용")
+        trace.done("reply", "warn", f"LLM 실패({llm.last_error}) · 템플릿 사용")
 
     session["history"] = (session["history"] + [message])[-10:]
     return _response(
