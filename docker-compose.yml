@@ -15,7 +15,7 @@ services:
       - "${DASHBOARD_PORT:-3000}:80"
     depends_on:
       mcp-client:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
 
   # ── 2. Agent (Intent 분류 + Tool 선택) ───────────────────
@@ -29,13 +29,18 @@ services:
       OLLAMA_HOST: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
       LLM_ENABLED: ${LLM_ENABLED:-true}
-      LLM_TIMEOUT: ${LLM_TIMEOUT:-45}
+      LLM_TIMEOUT: ${LLM_TIMEOUT:-90}
+      LLM_KEEP_ALIVE: ${LLM_KEEP_ALIVE:-30m}
     ports:
       - "${MCP_CLIENT_PORT:-8003}:8000"
     depends_on:
       api-server:
         condition: service_healthy
       mcp-server:
+        condition: service_healthy
+      # LLM은 없어도 규칙 라우팅으로 동작하므로 기다리지 않는다.
+      # 여기서 service_healthy를 걸면 모델 다운로드 내내 대시보드가 뜨지 않는다.
+      ollama:
         condition: service_started
     restart: unless-stopped
 
@@ -52,6 +57,18 @@ services:
     depends_on:
       api-server:
         condition: service_healthy
+    # 컨테이너가 뜬 것과 MCP 서버가 요청을 받을 준비가 된 것은 다르다.
+    # 포트가 실제로 열렸는지까지 확인해야 mcp-client의 첫 health가 실패하지 않는다.
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import socket; s=socket.create_connection(('127.0.0.1',8000),2); s.close()"
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
     restart: unless-stopped
 
   # ── 4. 도메인 API ────────────────────────────────────────
@@ -68,12 +85,11 @@ services:
   ollama:
     image: ollama/ollama:latest
     container_name: schedule-ollama
-    ports:
-      - "${OLLAMA_PORT:-11434}:11434"
-    volumes:
-      - ollama-models:/root/.ollama
-    restart: unless-stopped
-    # GPU를 쓰려면 아래 주석을 해제한다 (NVIDIA Container Toolkit 필요)
+    # NVIDIA GPU 사용. NVIDIA Container Toolkit이 설치돼 있어야 한다.
+    # 확인: docker run --rm --gpus all ubuntu nvidia-smi
+    # GPU가 없거나 macOS라면 이 줄만 주석 처리하면 CPU로 동작한다.
+    gpus: all
+    # Compose 버전이 낮아 gpus 키를 인식하지 못하면(v2.30 미만) 위 줄 대신 아래를 쓴다.
     # deploy:
     #   resources:
     #     reservations:
@@ -81,20 +97,41 @@ services:
     #         - driver: nvidia
     #           count: 1
     #           capabilities: [gpu]
+    environment:
+      # 요청별 keep_alive보다 서버 기본값이 확실하다. 모델이 메모리에 머무는 시간.
+      OLLAMA_KEEP_ALIVE: ${LLM_KEEP_ALIVE:-30m}
+      # 병렬 슬롯마다 KV 캐시가 따로 잡힌다. 8GB VRAM에서는 1로 고정해야
+      # 캐시가 넘쳐 일부 레이어가 CPU로 밀리는 것을 막을 수 있다.
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
 
-  # 모델 내려받기 전용 일회성 컨테이너. 받은 뒤 종료된다.
+  # 모델 내려받기 전용 일회성 컨테이너.
+  # 작업을 마치면 Exited(0)으로 종료된다 — 정상 동작이다.
   ollama-init:
     image: ollama/ollama:latest
     container_name: schedule-ollama-init
     depends_on:
-      - ollama
+      ollama:
+        condition: service_started
     environment:
       OLLAMA_HOST: http://ollama:11434
     entrypoint: ["/bin/sh", "-c"]
     command: >
       "echo '모델 준비 중: ${OLLAMA_MODEL:-qwen2.5:3b}';
        until ollama list > /dev/null 2>&1; do sleep 2; done;
-       ollama pull ${OLLAMA_MODEL:-qwen2.5:3b} && echo '모델 준비 완료'"
+       ollama pull ${OLLAMA_MODEL:-qwen2.5:3b} &&
+       echo '모델 준비 완료. 이 컨테이너는 여기서 정상 종료됩니다 (Exited 0).'"
     restart: "no"
 
 volumes:
