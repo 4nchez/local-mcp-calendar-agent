@@ -82,7 +82,7 @@ Dashboard → MCP Client (Intent 분류 · Tool 선택) → MCP Server (파싱 �
 필요한 것은 Docker와 Docker Compose뿐이다.
 
 ```bash
-git clone <repo> && cd local-schedule-agent
+git clone <repo> && cd local-mcp-calendar-agent
 cp .env.example .env
 make up          # 또는 docker compose up -d --build
 ```

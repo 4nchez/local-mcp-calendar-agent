@@ -4,7 +4,7 @@
 #   dashboard → mcp-client(Agent) → mcp-server(Tool) → api-server(Data)
 #                      └────────→ ollama(LLM)
 
-name: local-schedule-agent
+name: local-mcp-calendar-agent
 
 services:
   # ── 1. 화면 ──────────────────────────────────────────────
